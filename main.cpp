@@ -8,17 +8,18 @@ using namespace std;
 
 #pragma comment(lib, "Ws2_32.lib")
 
+
+bool initialize() {
+    WSADATA data;
+    return WSAStartup(MAKEWORD(2, 2), &data) == 0;
+}
+
 // Define a Node structure to represent each client socket
 struct Node {
     SOCKET clientSocket;
     Node* next;
     Node(SOCKET socket) : clientSocket(socket), next(nullptr) {}
 };
-
-bool initialize() {
-    WSADATA data;
-    return WSAStartup(MAKEWORD(2, 2), &data) == 0;
-}
 
 void Interactwithclient(SOCKET clientSocket, Node*& head) {
     cout << "Client connected" << endl;
@@ -74,6 +75,7 @@ int main() {
 
     cout << "Karim's chat application" << endl;
 
+    // Function for socket creation
     SOCKET listenSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (listenSocket == INVALID_SOCKET) {
         cout << "Cannot create socket" << endl;
