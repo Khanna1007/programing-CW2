@@ -110,6 +110,15 @@ bool initialize() {
     return WSAStartup(MAKEWORD(2, 2), &data) == 0;
 }
 
+// Saves a message to the user's chat history file
+void saveMessage(const string& username, const string& message) {
+    ofstream outFile(username + "_messages.txt", ios::app);
+    if (outFile.is_open()) {
+        outFile << encryptMessage(message) << endl;
+        outFile.close();
+    }
+}
+
 void SendMsg(SOCKET s) {
     cout << "Enter your chat name: ";
     string name;
@@ -118,6 +127,7 @@ void SendMsg(SOCKET s) {
 
     while (true) {
         getline(cin, message);
+        saveMessage(loggedInUser, name + ": " + message); // Save the message to chat history
         string encryptedMessage = encryptMessage(message); // Encrypt the message only
 
         // Combine the unencrypted name with the encrypted message
@@ -167,7 +177,7 @@ void ReceiveMsg(SOCKET s) {
                 string decryptedMessage = decryptMessage(encryptedMessage);
 
                 // Print the decrypted name and encrypted message
-                cout << name << ": " << decryptedMessage << endl;
+                cout << name << ": " << decryptedMessage << endl; 
             }
             else {
                 cout << "Invalid message format." << endl;
@@ -178,7 +188,21 @@ void ReceiveMsg(SOCKET s) {
     WSACleanup();
 }
 
-
+// View chat history
+void viewChatHistory(const string& username) {
+    ifstream inFile(username + "_messages.txt");
+    if (inFile.is_open()) {
+        string encryptedMessage;
+        while (getline(inFile, encryptedMessage)) {
+            string decryptedMessage = decryptMessage(encryptedMessage);
+            cout << decryptedMessage << endl;
+        }
+        inFile.close();
+    }
+    else {
+        cout << "No chat history found." << endl;
+    }
+}
 
 int main() {
     if (!initialize()) {
@@ -203,7 +227,7 @@ int main() {
             getline(cin, username);
             cout << "Enter a password: ";
             getline(cin, password);
-            password = encryptPassword(password); // Encrypt the password
+            password = encryptPassword(password);
             addUser(username, password);
             break;
         }
@@ -213,37 +237,61 @@ int main() {
             getline(cin, username);
             cout << "Enter your password: ";
             getline(cin, password);
-            password = encryptPassword(password); // Encrypt the password
+            password = encryptPassword(password);
             if (authenticateUser(username, password)) {
-                // Proceed to chat
-                SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
-                if (s == INVALID_SOCKET) {
-                    cout << "Invalid socket creation" << endl;
-                    return 1;
+                while (true) {
+                    cout << "Choose an option:" << endl;
+                    cout << "1. View Chat History" << endl;
+                    cout << "2. Enter Chat" << endl;
+                    cout << "3. Logout" << endl;
+
+                    int innerChoice;
+                    cin >> innerChoice;
+                    cin.ignore(); // Ignore the newline character in the input buffer
+
+                    switch (innerChoice) {
+                    case 1:
+                        viewChatHistory(username);
+                        break;
+                    case 2: {
+                        SOCKET s = socket(AF_INET, SOCK_STREAM, 0);
+                        if (s == INVALID_SOCKET) {
+                            cout << "Invalid socket creation" << endl;
+                            return 1;
+                        }
+
+                        int port = 12345;
+                        string serveraddress = "127.0.0.1";
+                        sockaddr_in srvraddr;
+                        srvraddr.sin_family = AF_INET;
+                        srvraddr.sin_port = htons(port);
+                        inet_pton(AF_INET, serveraddress.c_str(), &(srvraddr.sin_addr));
+
+                        if (connect(s, reinterpret_cast<sockaddr*>(&srvraddr), sizeof(srvraddr)) == SOCKET_ERROR) {
+                            cout << "Unable to connect to server: " << WSAGetLastError() << endl;
+                            closesocket(s);
+                            WSACleanup();
+                            return 1;
+                        }
+                        cout << "Successfully connected to server." << endl;
+
+                        thread senderThread(SendMsg, s);
+                        thread receiverThread(ReceiveMsg, s);
+
+                        senderThread.join();
+                        receiverThread.join();
+
+                        return 0;
+                    }
+                    case 3:
+                        cout << "Logging out." << endl;
+                        break;
+                    default:
+                        cout << "Invalid choice. Please try again." << endl;
+                        continue;
+                    }
+                    break; // Break out of the inner loop after logout
                 }
-
-                int port = 12345;
-                string serveraddress = "127.0.0.1";
-                sockaddr_in srvraddr;
-                srvraddr.sin_family = AF_INET;
-                srvraddr.sin_port = htons(port);
-                inet_pton(AF_INET, serveraddress.c_str(), &(srvraddr.sin_addr));
-
-                if (connect(s, reinterpret_cast<sockaddr*>(&srvraddr), sizeof(srvraddr)) == SOCKET_ERROR) {
-                    cout << "Unable to connect to server: " << WSAGetLastError() << endl;
-                    closesocket(s);
-                    WSACleanup();
-                    return 1;
-                }
-                cout << "Successfully connected to server." << endl;
-
-                thread senderThread(SendMsg, s);
-                thread receiverThread(ReceiveMsg, s);
-
-                senderThread.join();
-                receiverThread.join();
-
-                return 0;
             }
             else {
                 cout << "Invalid username or password. Please try again." << endl;
